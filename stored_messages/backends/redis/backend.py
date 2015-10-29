@@ -55,7 +55,7 @@ class RedisBackend(StoredMessagesBackend):
         return ret
 
     def _list(self, key_tpl, user):
-        return self._list_key(key_tpl % user.pk)
+        return self._list_key(key_tpl % str(user.pk))
 
     def create_message(self, level, msg_text, extra_tags='', date=None, url=None):
         """
@@ -80,12 +80,12 @@ class RedisBackend(StoredMessagesBackend):
     def inbox_list(self, user):
         if user.is_anonymous():
             return []
-        return self._list('user:%d:notifications', user)
+        return self._list('user:%s:notifications', user)
 
     def inbox_purge(self, user):
         if user.is_authenticated():
-            self.client.delete('user:%d:notifications' % user.pk)
-            self.client.delete('user:%d:notificationsidx' % user.pk)
+            self.client.delete('user:%s:notifications' % str(user.pk))
+            self.client.delete('user:%s:notificationsidx' % str(user.pk))
             signals.inbox_purged.send(sender=self.__class__, user=user)
 
     def inbox_store(self, users, msg_instance):
@@ -93,24 +93,24 @@ class RedisBackend(StoredMessagesBackend):
             raise MessageTypeNotSupported()
 
         for user in users:
-            if self.client.sismember('user:%d:notificationsidx' % user.pk, msg_instance.id):
+            if self.client.sismember('user:%s:notificationsidx' % str(user.pk), msg_instance.id):
                 return  # a duplicate, NOOP
             else:
-                self.client.sadd('user:%d:notificationsidx' % user.pk, msg_instance.id)
+                self.client.sadd('user:%s:notificationsidx' % str(user.pk), msg_instance.id)
 
-            self.client.rpush('user:%d:notifications' % user.pk, self._toJSON(msg_instance))
+            self.client.rpush('user:%s:notifications' % str(user.pk), self._toJSON(msg_instance))
             signals.inbox_stored.send(sender=self.__class__, user=user, message=msg_instance)
 
     def inbox_delete(self, user, msg_id):
-        for m in self._list('user:%d:notifications', user):
+        for m in self._list('user:%s:notifications', user):
             if m.id == msg_id:
-                msg = self.client.lrem('user:%d:notifications' % user.pk, 0, json.dumps(m._asdict()))
+                msg = self.client.lrem('user:%s:notifications' % str(user.pk), 0, json.dumps(m._asdict()))
                 signals.inbox_deleted.send(sender=self.__class__, user=user, message_id=msg_id)
                 return msg
         raise MessageDoesNotExist("Message with id %s does not exist" % msg_id)
 
     def inbox_get(self, user, msg_id):
-        for m in self._list('user:%d:notifications', user):
+        for m in self._list('user:%s:notifications', user):
             if m.id == msg_id:
                 return m
         raise MessageDoesNotExist("Message with id %s does not exist" % msg_id)
@@ -120,11 +120,11 @@ class RedisBackend(StoredMessagesBackend):
             raise MessageTypeNotSupported()
 
         for user in users:
-            self.client.rpush('user:%d:archive' % user.pk, self._toJSON(msg_instance))
+            self.client.rpush('user:%s:archive' % str(user.pk), self._toJSON(msg_instance))
             signals.archive_stored.send(sender=self.__class__, user=user, message=msg_instance)
 
     def archive_list(self, user):
-        return self._list('user:%d:archive', user)
+        return self._list('user:%s:archive', user)
 
     def can_handle(self, msg_instance):
         return isinstance(msg_instance, Message)
@@ -140,4 +140,4 @@ class RedisBackend(StoredMessagesBackend):
                     msg = json.dumps(m._asdict())
                     self.client.lrem(k, 0, msg)
                     self.client.srem('user:%s:notificationsidx' % user, m.id)
-                    self.client.rpop('user:%d:archive' % user, msg)
+                    self.client.rpop('user:%s:archive' % user, msg)
