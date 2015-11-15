@@ -20,7 +20,7 @@ except ImportError:
     pass
 
 
-Message = namedtuple('Message', ['id', 'message', 'level', 'tags', 'date', 'url'])
+Message = namedtuple('Message', ['id', 'message', 'level', 'tags', 'date', 'url', 'read'])
 
 
 class RedisBackend(StoredMessagesBackend):
@@ -75,7 +75,7 @@ class RedisBackend(StoredMessagesBackend):
         fingerprint = r + msg_text
 
         msg_id = hashlib.sha256(fingerprint.encode('ascii', 'ignore')).hexdigest()
-        return Message(id=msg_id, message=msg_text, level=level, tags=extra_tags, date=r, url=url)
+        return Message(id=msg_id, message=msg_text, level=level, tags=extra_tags, date=r, url=url, read=False)
 
     def inbox_list(self, user):
         if user.is_anonymous():
@@ -108,6 +108,23 @@ class RedisBackend(StoredMessagesBackend):
                 signals.inbox_deleted.send(sender=self.__class__, user=user, message_id=msg_id)
                 return msg
         raise MessageDoesNotExist("Message with id %s does not exist" % msg_id)
+
+    def inbox_read(self, user, msg_id):
+        for m in self._list('user:%s:notifications', user):
+            if m.id == msg_id:
+                msg = self.client.lrem('user:%s:notifications' % str(user.pk), 0, json.dumps(m._asdict()))
+                m._replace(read=True)
+                self.client.rpush('user:%s:notifications' % str(user.pk), self._toJSON(m))
+                signals.inbox_read.send(sender=self.__class__, user=user, message_id=msg_id)
+                return msg
+        raise MessageDoesNotExist("Message with id %s does not exist" % msg_id)
+
+    def inbox_all_read(self, user):
+        for m in self._list('user:%s:notifications', user):
+            self.client.lrem('user:%s:notifications' % str(user.pk), 0, json.dumps(m._asdict()))
+            m._replace(read=True)
+            self.client.rpush('user:%s:notifications' % str(user.pk), self._toJSON(m))
+        signals.inbox_all_read.send(sender=self.__class__, user=user)
 
     def inbox_get(self, user, msg_id):
         for m in self._list('user:%s:notifications', user):

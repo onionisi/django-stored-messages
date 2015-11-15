@@ -51,12 +51,33 @@ def mark_read(user, message):
     :param user: user instance for the recipient
     :param message: a Message instance to mark as read
     """
-    backend.inbox_delete(user, message)
+    backend.inbox_read(user, message)
 
 
 def mark_all_read(user):
     """
     Mark all message instances for a user as read.
+
+    :param user: user instance for the recipient
+    """
+    backend.inbox_all_read(user)
+
+
+def mark_delete(user, message):
+    """
+    Make message instance deleted for user.
+    Returns True if the message was `unread` and thus actually marked as `read` or False in case
+    it is already `read` or it does not exist at all.
+
+    :param user: user instance for the recipient
+    :param message: a Message instance to mark as read
+    """
+    backend.inbox_delete(user, message)
+
+
+def mark_all_delete(user):
+    """
+    Make all message instances for a user as deleted.
 
     :param user: user instance for the recipient
     """
