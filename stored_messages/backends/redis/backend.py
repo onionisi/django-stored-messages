@@ -113,8 +113,8 @@ class RedisBackend(StoredMessagesBackend):
         for m in self._list('user:%s:notifications', user):
             if m.id == msg_id:
                 msg = self.client.lrem('user:%s:notifications' % str(user.pk), 0, json.dumps(m._asdict()))
-                m._replace(read=True)
-                self.client.rpush('user:%s:notifications' % str(user.pk), self._toJSON(m))
+                new = m._replace(read=True)
+                self.client.rpush('user:%s:notifications' % str(user.pk), self._toJSON(new))
                 signals.inbox_read.send(sender=self.__class__, user=user, message_id=msg_id)
                 return msg
         raise MessageDoesNotExist("Message with id %s does not exist" % msg_id)
@@ -122,8 +122,9 @@ class RedisBackend(StoredMessagesBackend):
     def inbox_all_read(self, user):
         for m in self._list('user:%s:notifications', user):
             self.client.lrem('user:%s:notifications' % str(user.pk), 0, json.dumps(m._asdict()))
-            m._replace(read=True)
-            self.client.rpush('user:%s:notifications' % str(user.pk), self._toJSON(m))
+            new = m._replace(read=True)
+            self.client.rpush('user:%s:allread' % str(user.pk), self._toJSON(new))
+        self.client.rename('user:%s:allread' % str(user.pk), 'user:%s:notifications' % str(user.pk))
         signals.inbox_all_read.send(sender=self.__class__, user=user)
 
     def inbox_get(self, user, msg_id):
